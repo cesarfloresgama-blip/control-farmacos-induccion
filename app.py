@@ -2,40 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import os
-
-# ---------------------------------------------------------
-# REPARACIÓN AUTOMÁTICA DE CLAVE PRIVADA (RSA PEM PARSER)
-# ---------------------------------------------------------
-def _clean_pem_key(key):
-    if isinstance(key, str):
-        key = key.replace("\\n", "\n").replace("\r", "").strip()
-        if (key.startswith('"') and key.endswith('"')) or (key.startswith("'") and key.endswith("'")):
-            key = key[1:-1].strip().replace("\\n", "\n")
-        if not key.endswith("\n"):
-            key += "\n"
-    return key
-
-try:
-    import google.auth.crypt._cryptography_rsa
-    _orig_crypto_from_string = google.auth.crypt._cryptography_rsa.RSASigner.from_string.__func__
-    @classmethod
-    def _patched_crypto_from_string(cls, key, key_id=None):
-        return _orig_crypto_from_string(cls, _clean_pem_key(key), key_id=key_id)
-    google.auth.crypt._cryptography_rsa.RSASigner.from_string = classmethod(_patched_crypto_from_string)
-except Exception:
-    pass
-
-try:
-    import google.auth.crypt.rsa
-    _orig_rsa_from_string = google.auth.crypt.rsa.RSASigner.from_string.__func__
-    @classmethod
-    def _patched_rsa_from_string(cls, key, key_id=None):
-        return _orig_rsa_from_string(cls, _clean_pem_key(key), key_id=key_id)
-    google.auth.crypt.rsa.RSASigner.from_string = classmethod(_patched_rsa_from_string)
-except Exception:
-    pass
-
-from streamlit_gsheets import GSheetsConnection
+import gspread
 
 # ---------------------------------------------------------
 # CONFIGURACIÓN INICIAL DE LA PÁGINA
@@ -46,15 +13,62 @@ st.set_page_config(
     layout="wide"
 )
 
-# Conexión con Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+# ---------------------------------------------------------
+# CONEXIÓN DIRECTA Y ROBUSTA CON GOOGLE SHEETS (GSPREAD)
+# ---------------------------------------------------------
+@st.cache_resource
+def obtener_conexion_gsheets():
+    try:
+        # Extraer credenciales desde Streamlit Secrets
+        creds_dict = dict(st.secrets["connections"]["gsheets"])
+        
+        # Sanitizar formato de la clave privada RSA
+        if "private_key" in creds_dict and isinstance(creds_dict["private_key"], str):
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").replace("\r", "").strip()
+            if not creds_dict["private_key"].endswith("\n"):
+                creds_dict["private_key"] += "\n"
+        
+        # Autenticación directa
+        gc = gspread.service_account_from_dict(creds_dict)
+        spreadsheet_url = creds_dict.get("spreadsheet", "")
+        sh = gc.open_by_url(spreadsheet_url)
+        return sh
+    except Exception as e:
+        st.error(f"❌ Error al conectar con Google Sheets: {e}")
+        return None
+
+sh = obtener_conexion_gsheets()
 
 def cargar_datos(worksheet_name):
+    if sh is None:
+        return pd.DataFrame()
     try:
-        df = conn.read(worksheet=worksheet_name, ttl="0s")
-        return df.dropna(how="all")
+        ws = sh.worksheet(worksheet_name)
+        rows = ws.get_all_values()
+        if not rows or len(rows) <= 1:
+            if rows and len(rows) == 1:
+                return pd.DataFrame(columns=rows[0])
+            return pd.DataFrame()
+        return pd.DataFrame(rows[1:], columns=rows[0])
     except Exception:
         return pd.DataFrame()
+
+def guardar_datos(worksheet_name, df):
+    if sh is None:
+        st.error("No hay conexión con la base de datos.")
+        return False
+    try:
+        ws = sh.worksheet(worksheet_name)
+        ws.clear()
+        content = [df.columns.tolist()] + df.astype(str).values.tolist()
+        try:
+            ws.update(content)
+        except TypeError:
+            ws.update('A1', content)
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar datos: {e}")
+        return False
 
 # ---------------------------------------------------------
 # 1. FOTO DE ENCABEZADO (INSTITUTO NACIONAL DE CARDIOLOGÍA)
@@ -125,7 +139,7 @@ df_inactivos = cargar_datos("Bajas")
 hoy = datetime.now().date()
 limite_alerta = hoy + timedelta(days=60)
 
-if not df_activos.empty:
+if not df_activos.empty and "Caducidad" in df_activos.columns:
     for idx, row in df_activos.iterrows():
         try:
             cad = datetime.strptime(str(row["Caducidad"]), "%Y-%m-%d").date()
@@ -203,10 +217,15 @@ with tab_alta:
                     "Fecha Registro": datetime.now().strftime("%d/%m/%Y %H:%M")
                 }])
                 
+                # Definir columnas si estaba vacío
+                if df_activos.empty:
+                    df_activos = pd.DataFrame(columns=["Fármaco", "Lote", "Caducidad", "Cantidad", "Registró", "Fecha Registro"])
+                
                 df_actualizado = pd.concat([df_activos, nuevo_registro], ignore_index=True)
-                conn.update(worksheet="Existencias", data=df_actualizado)
-                st.success(f"✅ Registrado exitosamente por **{st.session_state.usuario}**.")
-                st.rerun()
+                
+                if guardar_datos("Existencias", df_actualizado):
+                    st.success(f"✅ Registrado exitosamente por **{st.session_state.usuario}**.")
+                    st.rerun()
 
 # --- PESTAÑA 3: BAJA DE MEDICAMENTO ---
 with tab_baja:
@@ -231,7 +250,7 @@ with tab_baja:
             btn_baja = st.form_submit_button("🔴 Confirmar Baja")
 
             if btn_baja:
-                # 1. Registrar la salida en la pestaña "Bajas"
+                # 1. Registrar la salida
                 nueva_baja = pd.DataFrame([{
                     "Fármaco": fila_sel["Fármaco"],
                     "Lote": fila_sel["Lote"],
@@ -241,17 +260,23 @@ with tab_baja:
                     "Atendió": st.session_state.usuario,
                     "Fecha Baja": datetime.now().strftime("%d/%m/%Y %H:%M")
                 }])
+                
+                if df_inactivos.empty:
+                    df_inactivos = pd.DataFrame(columns=["Fármaco", "Lote", "Cantidad", "Caducidad", "Motivo", "Atendió", "Fecha Baja"])
+                
                 df_bajas_actualizado = pd.concat([df_inactivos, nueva_baja], ignore_index=True)
-                conn.update(worksheet="Bajas", data=df_bajas_actualizado)
 
-                # 2. Descontar del inventario activo en "Existencias"
+                # 2. Descontar del stock activo
                 df_activos.at[idx_sel, "Cantidad"] = int(fila_sel["Cantidad"]) - int(cant_baja)
-                if df_activos.at[idx_sel, "Cantidad"] <= 0:
-                    df_activos = df_activos.drop(idx_sel)
+                if int(df_activos.at[idx_sel, "Cantidad"]) <= 0:
+                    df_activos = df_activos.drop(idx_sel).reset_index(drop=True)
 
-                conn.update(worksheet="Existencias", data=df_activos)
-                st.success(f"✅ Salida registrada exitosamente por **{st.session_state.usuario}**.")
-                st.rerun()
+                ok_bajas = guardar_datos("Bajas", df_bajas_actualizado)
+                ok_stock = guardar_datos("Existencias", df_activos)
+
+                if ok_bajas and ok_stock:
+                    st.success(f"✅ Salida registrada exitosamente por **{st.session_state.usuario}**.")
+                    st.rerun()
 
 # --- PESTAÑA 4: HISTÓRICO DE BAJAS ---
 with tab_historico:
