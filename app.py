@@ -1,10 +1,32 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
 import os
 
-# Configuración inicial de la página web
+# ---------------------------------------------------------
+# REPARACIÓN AUTOMÁTICA DE CLAVE PRIVADA (SERVICE ACCOUNT)
+# ---------------------------------------------------------
+try:
+    import google.oauth2.service_account
+    _orig_credentials_from_info = google.oauth2.service_account.Credentials.from_service_account_info
+
+    def _patched_credentials_from_info(info, *args, **kwargs):
+        if isinstance(info, dict) and "private_key" in info and isinstance(info["private_key"], str):
+            info_copy = dict(info)
+            # Convierte los caracteres literal '\n' en saltos de línea reales y remueve retornos de carro
+            info_copy["private_key"] = info_copy["private_key"].replace("\\n", "\n").replace("\r", "")
+            return _orig_credentials_from_info(info_copy, *args, **kwargs)
+        return _orig_credentials_from_info(info, *args, **kwargs)
+
+    google.oauth2.service_account.Credentials.from_service_account_info = _patched_credentials_from_info
+except Exception:
+    pass
+
+from streamlit_gsheets import GSheetsConnection
+
+# ---------------------------------------------------------
+# CONFIGURACIÓN INICIAL DE LA PÁGINA
+# ---------------------------------------------------------
 st.set_page_config(
     page_title="Inmunosupresores - Trasplante Renal INCICh",
     page_icon="💊",
@@ -25,7 +47,7 @@ def cargar_datos(worksheet_name):
 # 1. FOTO DE ENCABEZADO (INSTITUTO NACIONAL DE CARDIOLOGÍA)
 # ---------------------------------------------------------
 if os.path.exists("incich.jpg"):
-    col_i1, col_i2, col_i3 = st.columns([2, 1, 2])  # El espacio del centro (2) define el tamaño
+    col_i1, col_i2, col_i3 = st.columns([2, 1, 2])
     with col_i2:
         st.image("incich.jpg", use_container_width=True)
 
@@ -46,8 +68,8 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = ""
 
 if not st.session_state.autenticado:
-    st.title("🏥 TRASPLANTE RENAL - INCICh")
-    st.subheader("Control de Inmunosupresores para Trasplante Renal")
+    st.title("🏥 Central de Enfermería de Nefrología - INCICh")
+    st.subheader("Control de Inmunosupresores en Trasplante Renal")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -76,7 +98,7 @@ if st.sidebar.button("Cerrar Sesión"):
     st.session_state.usuario = ""
     st.rerun()
 
-# Encabezado institucional ajustado
+# Encabezado institucional
 st.title("💊 Bitácora de Inmunosupresores para Trasplante Renal-INCICh 🫘")
 st.caption("Control de entradas, salidas y monitoreo de caducidades en tiempo real")
 
