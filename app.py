@@ -46,8 +46,8 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = ""
 
 if not st.session_state.autenticado:
-    st.title("🏥 Central de Enfermería de Nefrología - INCICh")
-    st.subheader("Control de Inmunosupresores en Trasplante Renal")
+    st.title("🏥 TRASPLANTE RENAL - INCICh")
+    st.subheader("Control de Inmunosupresores para Trasplante Renal")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
