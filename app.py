@@ -13,34 +13,64 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------------------------------------------------
-# CONEXIÓN DIRECTA Y ROBUSTA CON GOOGLE SHEETS (GSPREAD)
-# ---------------------------------------------------------
-@st.cache_resource
-def obtener_conexion_gsheets():
-    try:
-        # Extraer credenciales desde Streamlit Secrets
-        creds_dict = dict(st.secrets["connections"]["gsheets"])
-        
-        # Sanitizar formato de la clave privada RSA
-        if "private_key" in creds_dict and isinstance(creds_dict["private_key"], str):
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").replace("\r", "").strip()
-            if not creds_dict["private_key"].endswith("\n"):
-                creds_dict["private_key"] += "\n"
-        
-        # Autenticación directa
-        gc = gspread.service_account_from_dict(creds_dict)
-        spreadsheet_url = creds_dict.get("spreadsheet", "")
-        sh = gc.open_by_url(spreadsheet_url)
-        return sh
-    except Exception as e:
-        st.error(f"❌ Error al conectar con Google Sheets: {e}")
-        return None
+# ID exacto de tu Hoja de Cálculo en Google Sheets
+ID_HOJA_DEFAULT = "16UZ-5ZwwP44qGTyawhGzYE7vcovRxzFL10AmAYdzLJs"
 
-sh = obtener_conexion_gsheets()
+# ---------------------------------------------------------
+# CONEXIÓN DIRECTA Y DIAGNÓSTICO DE GOOGLE SHEETS
+# ---------------------------------------------------------
+@st.cache_resource(ttl=3600)
+def iniciar_conexion_gsheets():
+    if "connections" not in st.secrets or "gsheets" not in st.secrets["connections"]:
+        raise ValueError("No se encontró la sección [connections.gsheets] en los Secrets de Streamlit Cloud.")
+
+    raw_secrets = dict(st.secrets["connections"]["gsheets"])
+    spreadsheet_url = raw_secrets.get("spreadsheet", "")
+
+    # Filtrar solo campos oficiales de credenciales de Google
+    creds_keys = [
+        "type", "project_id", "private_key_id", "private_key",
+        "client_email", "client_id", "auth_uri", "token_uri",
+        "auth_provider_x509_cert_url", "client_x509_cert_url"
+    ]
+    creds_dict = {k: raw_secrets[k] for k in creds_keys if k in raw_secrets}
+
+    # Limpieza estricta del formato de la clave privada RSA
+    if "private_key" in creds_dict and isinstance(creds_dict["private_key"], str):
+        pk = creds_dict["private_key"].replace("\\n", "\n").replace("\r", "").strip()
+        if (pk.startswith('"') and pk.endswith('"')) or (pk.startswith("'") and pk.endswith("'")):
+            pk = pk[1:-1].strip().replace("\\n", "\n")
+        if not pk.endswith("\n"):
+            pk += "\n"
+        creds_dict["private_key"] = pk
+
+    gc = gspread.service_account_from_dict(creds_dict)
+    
+    # Apertura del libro de trabajo
+    try:
+        sh = gc.open_by_key(ID_HOJA_DEFAULT)
+    except Exception:
+        if spreadsheet_url:
+            sh = gc.open_by_url(spreadsheet_url)
+        else:
+            raise
+
+    bot_email = creds_dict.get("client_email", "")
+    return sh, bot_email
+
+# Intentar conectar con la base de datos
+try:
+    sh, bot_email = iniciar_conexion_gsheets()
+    conexion_ok = True
+    error_conexion = ""
+except Exception as e:
+    sh = None
+    bot_email = ""
+    conexion_ok = False
+    error_conexion = str(e)
 
 def cargar_datos(worksheet_name):
-    if sh is None:
+    if not conexion_ok or sh is None:
         return pd.DataFrame()
     try:
         ws = sh.worksheet(worksheet_name)
@@ -54,8 +84,8 @@ def cargar_datos(worksheet_name):
         return pd.DataFrame()
 
 def guardar_datos(worksheet_name, df):
-    if sh is None:
-        st.error("No hay conexión con la base de datos.")
+    if not conexion_ok or sh is None:
+        st.error("❌ No hay conexión con la base de datos de Google Sheets.")
         return False
     try:
         ws = sh.worksheet(worksheet_name)
@@ -67,14 +97,14 @@ def guardar_datos(worksheet_name, df):
             ws.update('A1', content)
         return True
     except Exception as e:
-        st.error(f"Error al guardar datos: {e}")
+        st.error(f"❌ Error al guardar en '{worksheet_name}': {e}")
         return False
 
 # ---------------------------------------------------------
 # 1. FOTO DE ENCABEZADO (INSTITUTO NACIONAL DE CARDIOLOGÍA)
 # ---------------------------------------------------------
 if os.path.exists("incich.jpg"):
-    col_i1, col_i2, col_i3 = st.columns([2, 1, 2])
+    col_i1, col_i2, col_i3 = st.columns([1, 2, 1])
     with col_i2:
         st.image("incich.jpg", use_container_width=True)
 
@@ -129,6 +159,14 @@ if st.sidebar.button("Cerrar Sesión"):
 st.title("💊 Bitácora de Inmunosupresores para Trasplante Renal-INCICh 🫘")
 st.caption("Control de entradas, salidas y monitoreo de caducidades en tiempo real")
 
+# Mostrar advertencia de diagnóstico si la conexión falló
+if not conexion_ok:
+    st.error(f"⚠️ **Atención:** No se pudo establecer conexión con Google Sheets.")
+    st.caption(f"Detalle técnico del error: `{error_conexion}`")
+    if bot_email:
+        st.warning(f"👉 Confirma que la hoja de cálculo esté compartida con rol de **Editor** al correo del bot:\n`{bot_email}`")
+    st.divider()
+
 # Cargar bases de datos desde Google Sheets
 df_activos = cargar_datos("Existencias")
 df_inactivos = cargar_datos("Bajas")
@@ -171,7 +209,7 @@ tab_stock, tab_alta, tab_baja, tab_historico = st.tabs([
 with tab_stock:
     st.header("Inventario Actual en Resguardo")
     if df_activos.empty:
-        st.info("No hay fármacos registrados en el inventario de Google Sheets.")
+        st.info("No hay fármacos registrados en el inventario.")
     else:
         st.dataframe(df_activos, use_container_width=True, hide_index=True)
 
@@ -217,7 +255,6 @@ with tab_alta:
                     "Fecha Registro": datetime.now().strftime("%d/%m/%Y %H:%M")
                 }])
                 
-                # Definir columnas si estaba vacío
                 if df_activos.empty:
                     df_activos = pd.DataFrame(columns=["Fármaco", "Lote", "Caducidad", "Cantidad", "Registró", "Fecha Registro"])
                 
@@ -250,7 +287,6 @@ with tab_baja:
             btn_baja = st.form_submit_button("🔴 Confirmar Baja")
 
             if btn_baja:
-                # 1. Registrar la salida
                 nueva_baja = pd.DataFrame([{
                     "Fármaco": fila_sel["Fármaco"],
                     "Lote": fila_sel["Lote"],
@@ -266,7 +302,6 @@ with tab_baja:
                 
                 df_bajas_actualizado = pd.concat([df_inactivos, nueva_baja], ignore_index=True)
 
-                # 2. Descontar del stock activo
                 df_activos.at[idx_sel, "Cantidad"] = int(fila_sel["Cantidad"]) - int(cant_baja)
                 if int(df_activos.at[idx_sel, "Cantidad"]) <= 0:
                     df_activos = df_activos.drop(idx_sel).reset_index(drop=True)
