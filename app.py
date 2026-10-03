@@ -4,21 +4,34 @@ from datetime import datetime, timedelta
 import os
 
 # ---------------------------------------------------------
-# REPARACIÓN AUTOMÁTICA DE CLAVE PRIVADA (SERVICE ACCOUNT)
+# REPARACIÓN AUTOMÁTICA DE CLAVE PRIVADA (RSA PEM PARSER)
 # ---------------------------------------------------------
+def _clean_pem_key(key):
+    if isinstance(key, str):
+        key = key.replace("\\n", "\n").replace("\r", "").strip()
+        if (key.startswith('"') and key.endswith('"')) or (key.startswith("'") and key.endswith("'")):
+            key = key[1:-1].strip().replace("\\n", "\n")
+        if not key.endswith("\n"):
+            key += "\n"
+    return key
+
 try:
-    import google.oauth2.service_account
-    _orig_credentials_from_info = google.oauth2.service_account.Credentials.from_service_account_info
+    import google.auth.crypt._cryptography_rsa
+    _orig_crypto_from_string = google.auth.crypt._cryptography_rsa.RSASigner.from_string.__func__
+    @classmethod
+    def _patched_crypto_from_string(cls, key, key_id=None):
+        return _orig_crypto_from_string(cls, _clean_pem_key(key), key_id=key_id)
+    google.auth.crypt._cryptography_rsa.RSASigner.from_string = classmethod(_patched_crypto_from_string)
+except Exception:
+    pass
 
-    def _patched_credentials_from_info(info, *args, **kwargs):
-        if isinstance(info, dict) and "private_key" in info and isinstance(info["private_key"], str):
-            info_copy = dict(info)
-            # Convierte los caracteres literal '\n' en saltos de línea reales y remueve retornos de carro
-            info_copy["private_key"] = info_copy["private_key"].replace("\\n", "\n").replace("\r", "")
-            return _orig_credentials_from_info(info_copy, *args, **kwargs)
-        return _orig_credentials_from_info(info, *args, **kwargs)
-
-    google.oauth2.service_account.Credentials.from_service_account_info = _patched_credentials_from_info
+try:
+    import google.auth.crypt.rsa
+    _orig_rsa_from_string = google.auth.crypt.rsa.RSASigner.from_string.__func__
+    @classmethod
+    def _patched_rsa_from_string(cls, key, key_id=None):
+        return _orig_rsa_from_string(cls, _clean_pem_key(key), key_id=key_id)
+    google.auth.crypt.rsa.RSASigner.from_string = classmethod(_patched_rsa_from_string)
 except Exception:
     pass
 
