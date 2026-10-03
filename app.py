@@ -148,7 +148,7 @@ USUARIOS_CONFIG = {
         "rol": "editor"
     },
     "Elisa_Mendoza": {
-        "pass": "elisa2026",
+        "pass": "elisa26",
         "rol": "lector"
     }
 }
