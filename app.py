@@ -25,7 +25,9 @@ def cargar_datos(worksheet_name):
 # 1. FOTO DE ENCABEZADO (INSTITUTO NACIONAL DE CARDIOLOGÍA)
 # ---------------------------------------------------------
 if os.path.exists("incich.jpg"):
-    st.image("incich.jpg", use_container_width=True)
+    col_i1, col_i2, col_i3 = st.columns([1, 2, 1])  # El espacio del centro (2) define el tamaño
+    with col_i2:
+        st.image("incich.jpg", use_container_width=True)
 
 # ---------------------------------------------------------
 # 2. CONTROL DE ACCESO CON USUARIOS AUTORIZADOS
