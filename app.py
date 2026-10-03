@@ -124,21 +124,33 @@ def guardar_datos(nombre_pestana, df, columnas_default):
 # 1. FOTO DE ENCABEZADO (INSTITUTO NACIONAL DE CARDIOLOGÍA)
 # ---------------------------------------------------------
 if os.path.exists("incich.jpg"):
-    col_i1, col_i2, col_i3 = st.columns([1, 2, 1])
+    col_i1, col_i2, col_i3 = st.columns([2, 1, 2])
     with col_i2:
         st.image("incich.jpg", use_container_width=True)
 
 # ---------------------------------------------------------
-# 2. CONTROL DE ACCESO Y CONFIGURACIÓN DE ROLES DE USUARIO
+# 2. CONFIGURACIÓN DE USUARIOS, CONTRASENAS Y PERMISOS
 # ---------------------------------------------------------
-# Para agregar nuevos usuarios o cambiar permisos en el futuro, edita este diccionario:
-# "editor": Puede consultar, dar de alta y dar de baja.
-# "lector": Únicamente puede consultar existencias e histórico.
-USUARIOS_PERMISOS = {
-    "César_FG": "editor",
-    "Blanca_Jareth": "editor",
-    "Residente_Nefro": "editor",
-    "Elisa_Mendoza": "lector"
+# Edita aquí las contraseñas ("pass") y roles ("rol") de cada persona:
+# - "editor": Puede consultar, registrar entradas y dar de baja.
+# - "lector": Únicamente puede ver inventarios e historial.
+USUARIOS_CONFIG = {
+    "César_FG": {
+        "pass": "cesar2026",
+        "rol": "editor"
+    },
+    "Blanca_Jareth": {
+        "pass": "blanca2026",
+        "rol": "editor"
+    },
+    "Residente_Nefro": {
+        "pass": "nefro2026",
+        "rol": "editor"
+    },
+    "Elisa_Mendoza": {
+        "pass": "elisa2026",
+        "rol": "lector"
+    }
 }
 
 if "autenticado" not in st.session_state:
@@ -151,26 +163,26 @@ if "rol" not in st.session_state:
     st.session_state.rol = "lector"
 
 if not st.session_state.autenticado:
-    # --- AQUÍ PUEDES EDITAR LOS TÍTULOS DE LA PÁGINA DE BIENVENIDA ---
-    st.title("🏥 Central de Enfermería de Nefrología - INCICh")
+    st.title("🏥 Departamento de Nefrología - INCICh")
     st.subheader("Control de Inmunosupresores en Trasplante Renal")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.form("login_form"):
             st.markdown("### Acceso al Sistema")
-            usuario_input = st.selectbox("Selecciona tu Usuario", list(USUARIOS_PERMISOS.keys()))
+            usuario_input = st.selectbox("Selecciona tu Usuario", list(USUARIOS_CONFIG.keys()))
             pass_input = st.text_input("Contraseña", type="password")
             submit = st.form_submit_button("Ingresar")
             
             if submit:
-                if pass_input.lower().strip() == "inducciontrasplanterenal":
+                datos_user = USUARIOS_CONFIG.get(usuario_input)
+                if datos_user and pass_input.strip() == datos_user["pass"]:
                     st.session_state.autenticado = True
                     st.session_state.usuario = usuario_input
-                    st.session_state.rol = USUARIOS_PERMISOS.get(usuario_input, "lector")
+                    st.session_state.rol = datos_user["rol"]
                     st.rerun()
                 else:
-                    st.error("❌ Contraseña incorrecta.")
+                    st.error("❌ Contraseña incorrecta para el usuario seleccionado.")
     st.stop()
 
 # ---------------------------------------------------------
@@ -224,7 +236,7 @@ if not df_activos.empty and "Caducidad" in df_activos.columns:
 st.divider()
 
 # ---------------------------------------------------------
-# 5. PESTAÑAS DE TRABAJO SEGÚN EL ROL DE USUARIO
+# 5. PESTAÑAS DE TRABAJO SEGÚN EL ROL
 # ---------------------------------------------------------
 es_editor = (st.session_state.rol == "editor")
 
@@ -241,7 +253,7 @@ else:
         "📜 Histórico de Bajas"
     ])
 
-# --- PESTAÑA 1: EXISTENCIAS (LECTURA) ---
+# --- PESTAÑA 1: EXISTENCIAS ---
 with tab_stock:
     st.header("Inventario Actual en Resguardo")
     if df_activos.empty:
@@ -345,7 +357,7 @@ if es_editor:
                         st.success(f"✅ Salida registrada exitosamente por **{st.session_state.usuario}**.")
                         st.rerun()
 
-# --- PESTAÑA 4: HISTÓRICO DE BAJAS (LECTURA) ---
+# --- PESTAÑA 4: HISTÓRICO DE BAJAS ---
 with tab_historico:
     st.header("Historial de Salidas y Mermas")
     if df_inactivos.empty:
