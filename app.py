@@ -173,7 +173,7 @@ if "rol" not in st.session_state:
     st.session_state.rol = "lector"
 
 if not st.session_state.autenticado:
-    st.title("🏥 Central de Enfermería de Nefrología - INCICh")
+    st.title("🏥 Departamento de Nefrología - INCICh")
     st.subheader("Control de Inmunosupresores en Trasplante Renal")
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -225,7 +225,7 @@ if st.sidebar.button("🚪 Cerrar Sesión"):
 # ---------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.caption("👨‍⚕️ **Desarrollado por:**  C.F.G.")
-st.sidebar.caption("🏥 *Departamento de Trasplante Renal - INCICh*")
+st.sidebar.caption("🏥 *Departamento de Nefrología - INCICh*")
 st.sidebar.caption("© 2026 Todos los derechos reservados")
 
 # Encabezado institucional
