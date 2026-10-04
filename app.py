@@ -16,13 +16,6 @@ st.set_page_config(
 
 ID_HOJA_DEFAULT = "16UZ-5ZwwP44qGTyawhGzYE7vcovRxzFL10AmAYdzLJs"
 
-# ---------------------------------------------------------
-# CONFIGURACIÓN DE ZONA HORARIA (CIUDAD DE MÉXICO - INCICh)
-# ---------------------------------------------------------
-ZONA_CDMX = ZoneInfo("America/Mexico_City")
-
-def ahora_cdmx():
-    return datetime.now(ZONA_CDMX)
 
 # ---------------------------------------------------------
 # REPARACIÓN Y LIMPIEZA DE CLAVE RSA PEM
