@@ -17,6 +17,14 @@ st.set_page_config(
 ID_HOJA_DEFAULT = "16UZ-5ZwwP44qGTyawhGzYE7vcovRxzFL10AmAYdzLJs"
 
 # ---------------------------------------------------------
+# CONFIGURACIÓN DE ZONA HORARIA (CIUDAD DE MÉXICO - INCICh)
+# ---------------------------------------------------------
+ZONA_CDMX = ZoneInfo("America/Mexico_City")
+
+def ahora_cdmx():
+    return datetime.now(ZONA_CDMX)
+
+# ---------------------------------------------------------
 # REPARACIÓN Y LIMPIEZA DE CLAVE RSA PEM
 # ---------------------------------------------------------
 def reconstruir_clave_pem(raw_pk):
@@ -312,14 +320,14 @@ with tab_stock:
 # --- PESTAÑA 2: ALTA DE MEDICAMENTO (SOLO EDITORES) ---
 if es_editor:
     OPCIONES_FARMACOS = [
-        "Tacrolimus 1 mg",
-        "Tacrolimus 5 mg",
-        "Micofenolato 500 mg",
-        "Ac Micofenólico 360 mg",
+        "Tacrolimus 1 mg (caja)",
+        "Tacrolimus 5 mg (caja)",
+        "Micofenolato 500 mg (caja)",
+        "Ac Micofenólico 360 mg (caja)",
         "Basiliximab (frasco)",
         "Timoglobulina (frasco)",
-        "Rituximab 500 mg",
-        "Rituximab 100 mg",
+        "Rituximab 500 mg (frasco)",
+        "Rituximab 100 mg (frasco)",
         "Inmunoglobulina (frasco)",
         "OTRO"
     ]
