@@ -251,7 +251,7 @@ alerta_desactualizado = False
 if ultima_fecha_str != "Sin registro previo":
     try:
         fecha_dt = datetime.strptime(ultima_fecha_str, "%d/%m/%Y %H:%M")
-        if (datetime.now() - fecha_dt).days >= 7:
+        if (ahora_cdmx() - fecha_dt).days >= 7:
             alerta_desactualizado = True
     except Exception:
         pass
