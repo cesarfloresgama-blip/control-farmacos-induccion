@@ -5,6 +5,10 @@ import os
 import gspread
 from google.oauth2.service_account import Credentials
 
+# Función para calcular la hora de Ciudad de México (UTC - 6 horas)
+def ahora_cdmx():
+    return datetime.utcnow() - timedelta(hours=6)
+
 # ---------------------------------------------------------
 # CONFIGURACIÓN INICIAL DE LA PÁGINA
 # ---------------------------------------------------------
