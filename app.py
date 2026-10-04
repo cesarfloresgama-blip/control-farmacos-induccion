@@ -224,7 +224,7 @@ if st.sidebar.button("🚪 Cerrar Sesión"):
 # FIRMA Y CRÉDITOS PERSONALES (SIDEBAR FOOTER)
 # ---------------------------------------------------------
 st.sidebar.markdown("---")
-st.sidebar.caption("👨‍⚕️ **Desarrollado por:**  C.F.G.")
+st.sidebar.caption("👨🏽‍💻 **Desarrollado por:**  C.F.G.")
 st.sidebar.caption("🏥 *Departamento de Nefrología - INCICh*")
 st.sidebar.caption("© 2026 Todos los derechos reservados")
 
