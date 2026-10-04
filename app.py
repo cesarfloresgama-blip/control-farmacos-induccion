@@ -79,6 +79,7 @@ sh, bot_email, error_msg = conectar_google_sheets()
 
 COLS_EXISTENCIAS = ["Fármaco", "Lote", "Caducidad", "Cantidad", "Registró", "Fecha Registro"]
 COLS_BAJAS = ["Fármaco", "Lote", "Cantidad", "Caducidad", "Motivo", "Atendió", "Fecha Baja"]
+COLS_CONTROL = ["Ultima_Actualizacion", "Usuario"]
 
 def obtener_o_crear_pestana(sh_obj, nombre_pestana, columnas):
     try:
@@ -120,6 +121,18 @@ def guardar_datos(nombre_pestana, df, columnas_default):
         st.error(f"❌ Error al guardar en '{nombre_pestana}': {e}")
         return False
 
+# Funciones de seguimiento de última actualización
+def registrar_actualizacion_global(usuario):
+    fecha_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    df_act = pd.DataFrame([{"Ultima_Actualizacion": fecha_str, "Usuario": usuario}])
+    guardar_datos("Control", df_act, COLS_CONTROL)
+
+def obtener_ultima_actualizacion():
+    df_ctrl = cargar_datos("Control", COLS_CONTROL)
+    if not df_ctrl.empty and "Ultima_Actualizacion" in df_ctrl.columns:
+        return df_ctrl.iloc[-1]["Ultima_Actualizacion"], df_ctrl.iloc[-1].get("Usuario", "Sistema")
+    return "Sin registro previo", "N/A"
+
 # ---------------------------------------------------------
 # 1. FOTO DE ENCABEZADO (INSTITUTO NACIONAL DE CARDIOLOGÍA)
 # ---------------------------------------------------------
@@ -129,11 +142,8 @@ if os.path.exists("incich.jpg"):
         st.image("incich.jpg", use_container_width=True)
 
 # ---------------------------------------------------------
-# 2. CONFIGURACIÓN DE USUARIOS, CONTRASENAS Y PERMISOS
+# 2. CONFIGURACIÓN DE USUARIOS, CONTRASEÑAS Y PERMISOS
 # ---------------------------------------------------------
-# Edita aquí las contraseñas ("pass") y roles ("rol") de cada persona:
-# - "editor": Puede consultar, registrar entradas y dar de baja.
-# - "lector": Únicamente puede ver inventarios e historial.
 USUARIOS_CONFIG = {
     "César_FG": {
         "pass": "cesar2026",
@@ -148,7 +158,7 @@ USUARIOS_CONFIG = {
         "rol": "editor"
     },
     "Elisa_Mendoza": {
-        "pass": "elisa26",
+        "pass": "elisa2026",
         "rol": "lector"
     }
 }
@@ -163,7 +173,7 @@ if "rol" not in st.session_state:
     st.session_state.rol = "lector"
 
 if not st.session_state.autenticado:
-    st.title("🏥 Departamento de Nefrología - INCICh")
+    st.title("🏥 Central de Enfermería de Nefrología - INCICh")
     st.subheader("Control de Inmunosupresores en Trasplante Renal")
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -192,11 +202,31 @@ rol_texto = "Modo Edición" if st.session_state.rol == "editor" else "Modo Solo 
 st.sidebar.title(f"👤 {st.session_state.usuario}")
 st.sidebar.caption(f"Instituto Nacional de Cardiología Ignacio Chávez\n\n📌 **Perfil:** {rol_texto}")
 
-if st.sidebar.button("Cerrar Sesión"):
+es_editor = (st.session_state.rol == "editor")
+
+# Botón manual de actualización semanal para editores
+if es_editor:
+    st.sidebar.divider()
+    if st.sidebar.button("🔄 Registrar Revisión Semanal"):
+        registrar_actualizacion_global(st.session_state.usuario)
+        st.sidebar.success("✅ Revisión semanal registrada correctamente.")
+        st.rerun()
+
+st.sidebar.divider()
+
+if st.sidebar.button("🚪 Cerrar Sesión"):
     st.session_state.autenticado = False
     st.session_state.usuario = ""
     st.session_state.rol = "lector"
     st.rerun()
+
+# ---------------------------------------------------------
+# FIRMA Y CRÉDITOS PERSONALES (SIDEBAR FOOTER)
+# ---------------------------------------------------------
+st.sidebar.markdown("---")
+st.sidebar.caption("👨‍⚕️ **Desarrollado por:**  C.F.G.")
+st.sidebar.caption("🏥 *Departamento de Trasplante Renal - INCICh*")
+st.sidebar.caption("© 2026 Todos los derechos reservados")
 
 # Encabezado institucional
 st.title("💊 Bitácora de Inmunosupresores para Trasplante Renal-INCICh 🫘")
@@ -206,6 +236,26 @@ if sh is None:
     st.error("🚨 **Atención: No se pudo conectar con Google Sheets**")
     st.code(error_msg, language="text")
     st.divider()
+
+# ---------------------------------------------------------
+# ALERTA DE ÚLTIMA ACTUALIZACIÓN SEMANAL
+# ---------------------------------------------------------
+ultima_fecha_str, usuario_act = obtener_ultima_actualizacion()
+
+alerta_desactualizado = False
+if ultima_fecha_str != "Sin registro previo":
+    try:
+        fecha_dt = datetime.strptime(ultima_fecha_str, "%d/%m/%Y %H:%M")
+        if (datetime.now() - fecha_dt).days >= 7:
+            alerta_desactualizado = True
+    except Exception:
+        pass
+
+if alerta_desactualizado:
+    st.warning(f"⚠️ **Atención: El inventario lleva más de 7 días sin revisarse o actualizarse.**\n\n"
+               f"📅 **Última actualización/revisión:** {ultima_fecha_str} por **{usuario_act}**.")
+else:
+    st.info(f"📅 **Última actualización / revisión del inventario:** {ultima_fecha_str} (por **{usuario_act}**)")
 
 # Cargar bases de datos desde Google Sheets
 df_activos = cargar_datos("Existencias", COLS_EXISTENCIAS)
@@ -238,8 +288,6 @@ st.divider()
 # ---------------------------------------------------------
 # 5. PESTAÑAS DE TRABAJO SEGÚN EL ROL
 # ---------------------------------------------------------
-es_editor = (st.session_state.rol == "editor")
-
 if es_editor:
     tab_stock, tab_alta, tab_baja, tab_historico = st.tabs([
         "📊 Existencias (Stock)", 
@@ -307,6 +355,7 @@ if es_editor:
                     df_actualizado = pd.concat([df_activos, nuevo_registro], ignore_index=True)
                     
                     if guardar_datos("Existencias", df_actualizado, COLS_EXISTENCIAS):
+                        registrar_actualizacion_global(st.session_state.usuario)
                         st.success(f"✅ Registrado exitosamente por **{st.session_state.usuario}**.")
                         st.rerun()
 
@@ -354,6 +403,7 @@ if es_editor:
                     ok_stock = guardar_datos("Existencias", df_activos, COLS_EXISTENCIAS)
 
                     if ok_bajas and ok_stock:
+                        registrar_actualizacion_global(st.session_state.usuario)
                         st.success(f"✅ Salida registrada exitosamente por **{st.session_state.usuario}**.")
                         st.rerun()
 
