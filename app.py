@@ -151,7 +151,7 @@ if os.path.exists("incich.jpg"):
 # ---------------------------------------------------------
 USUARIOS_CONFIG = {
     "César_FG": {
-        "pass": "cesar2026",
+        "pass": "cfgmvp2026",
         "rol": "editor"
     },
     "Blanca_Jareth": {
