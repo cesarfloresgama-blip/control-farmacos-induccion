@@ -400,10 +400,14 @@ if es_editor:
                     
                     df_bajas_actualizado = pd.concat([df_inactivos, nueva_baja], ignore_index=True)
 
-                    df_activos.at[idx_sel, "Cantidad"] = int(fila_sel["Cantidad"]) - int(cant_baja)
-                    if int(df_activos.at[idx_sel, "Cantidad"]) <= 0:
-                        df_activos = df_activos.drop(idx_sel).reset_index(drop=True)
 
+                    # ✅ CÓDIGO CORREGIDO
+                    nueva_cant = int(fila_sel["Cantidad"]) - int(cant_baja)
+                    if nueva_cant <= 0:
+                        df_activos = df_activos.drop(idx_sel).reset_index(drop=True)
+                    else:
+                        df_activos.at[idx_sel, "Cantidad"] = str(nueva_cant)
+                    
                     ok_bajas = guardar_datos("Bajas", df_bajas_actualizado, COLS_BAJAS)
                     ok_stock = guardar_datos("Existencias", df_activos, COLS_EXISTENCIAS)
 
